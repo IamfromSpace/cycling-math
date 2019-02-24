@@ -1,42 +1,53 @@
+{-# LANGUAGE NamedFieldPuns #-}
 module Lib
     ( totalConsumed
     , wPrimeBals
     , xWPrime
     , workoutToPowers
-    , workoutToBals
+    , powersToBals
+    , Workout(..)
     ) where
 
 import           Control.Monad (join)
 
-nextBal :: Float -> Float -> Float -> Float -> Float
-nextBal cp wPrime bal p =
+type Fitness = (Float, Float)
+
+nextBal :: Fitness -> Float -> Float -> Float
+nextBal (cp, wPrime) bal p =
   bal + (cp - p) * (if p > cp then 1 else (wPrime - bal) / wPrime)
 
-wPrimeBals :: Float -> Float -> Float -> [Float] -> [Float]
-wPrimeBals cp wPrime balInit =
-  reverse . foldl (\bals p -> nextBal cp wPrime (head bals) p : bals) [balInit]
+wPrimeBals :: Fitness -> Float -> [Float] -> [Float]
+wPrimeBals fitness balInit =
+  reverse . foldl (\bals p -> nextBal fitness (head bals) p : bals) [balInit]
 
 totalConsumed :: [Float] -> Float
 totalConsumed (h:t) =
   fst $ foldl (\(runningTotal, previousBal) bal -> (runningTotal + max 0.0 (previousBal - bal), bal)) (0, h) t
 
-xWPrime :: Float -> Float -> Int -> Int -> (Int, Float) -> (Int, Float) -> Float
-xWPrime cp wPrime intervalCount firstDir standardDef restDef =
-  (/ wPrime) $
-    totalConsumed $
-    workoutToBals cp wPrime intervalCount firstDir standardDef restDef
+xWPrime :: Fitness -> [Float] -> Float
+xWPrime fitness@(_, wPrime) =
+  (/ wPrime) .
+    totalConsumed .
+    powersToBals fitness
 
-workoutToBals :: Float -> Float -> Int -> Int -> (Int, Float) -> (Int, Float) -> [Float]
-workoutToBals cp wPrime intervalCount firstDir standardDef restDef =
-  wPrimeBals cp wPrime wPrime $
-    workoutToPowers intervalCount firstDir standardDef restDef
+powersToBals :: Fitness -> [Float] -> [Float]
+powersToBals fitness@(_, wPrime) = wPrimeBals fitness wPrime
 
-workoutToPowers :: Int -> Int -> (Int, Float) -> (Int, Float) -> [Float]
-workoutToPowers intervalCount firstDir (standardDir, standardPower) (restDir, restPower) =
+data Workout = Workout
+  { intervalCount    :: Int
+  , firstDuration    :: Int
+  , standardDuration :: Int
+  , standardPower    :: Float
+  , restDuration     :: Int
+  , restPower        :: Float
+  }
+
+workoutToPowers :: Workout -> [Float]
+workoutToPowers Workout { intervalCount, firstDuration, standardDuration, standardPower, restDuration, restPower } =
   let
-    firstPowers = replicate firstDir standardPower
-    standardPowers = replicate standardDir standardPower
-    restPowers = replicate restDir restPower
+    firstPowers = replicate firstDuration standardPower
+    standardPowers = replicate standardDuration standardPower
+    restPowers = replicate restDuration restPower
     intervalPowers =
         join $
         replicate (intervalCount - 1)
