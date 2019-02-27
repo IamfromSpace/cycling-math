@@ -25,10 +25,8 @@ totalConsumed (h:t) =
   fst $ foldl (\(runningTotal, previousBal) bal -> (runningTotal + max 0.0 (previousBal - bal), bal)) (0, h) t
 
 xWPrime :: Fitness -> [Float] -> Float
-xWPrime fitness@(_, wPrime) =
-  (/ wPrime) .
-    totalConsumed .
-    powersToBals fitness
+xWPrime fitness@(cp, wPrime) =
+  (/ wPrime) . sum . map (\p -> max 0 (p - cp))
 
 powersToBals :: Fitness -> [Float] -> [Float]
 powersToBals fitness@(_, wPrime) = wPrimeBals fitness wPrime
