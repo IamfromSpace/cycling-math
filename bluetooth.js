@@ -4,8 +4,7 @@ let foundKickr = false;
 let foundHrm = false;
 let foundCadenceMeter = false;
 
-const getIsDoneDiscovering = () =>
-  foundKickr && foundHrm && foundCadenceMeter;
+const getIsDoneDiscovering = () => foundKickr && foundHrm && foundCadenceMeter;
 
 const log = (...rest) => console.error(new Date(), ...rest);
 
@@ -54,9 +53,7 @@ const handleHrMonitor = peripheral => {
       (err, services, characteristics) => {
         log("Services and Characteristics Discovered");
 
-        const hrmCharacteristic = characteristics.find(
-          x => x.uuid === "2a37"
-        );
+        const hrmCharacteristic = characteristics.find(x => x.uuid === "2a37");
         hrmCharacteristic.subscribe(err => {
           if (err) {
             log("Could not subscribe to HRM!");
@@ -74,7 +71,7 @@ const handleHrMonitor = peripheral => {
       }
     );
   });
-}
+};
 
 const handleCadenceMeter = peripheral => {
   peripheral.connect(err => {
@@ -105,9 +102,9 @@ const handleCadenceMeter = peripheral => {
           }
         });
       }
-      );
+    );
   });
-}
+};
 
 const handleKickr = peripheral => {
   peripheral.connect(err => {
@@ -177,7 +174,7 @@ const handleKickr = peripheral => {
       }
     );
   });
-}
+};
 
 const parsePowerMeasure = buffer => {
   const flags = (buffer[1] << 8) + buffer[0];
