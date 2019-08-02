@@ -17,11 +17,6 @@ noble.on("stateChange", state => {
 });
 
 noble.on("discover", peripheral => {
-  if (getIsDoneDiscovering()) {
-    log("Done scanning.");
-    noble.stopScanning();
-  }
-
   if (peripheral.advertisement.serviceUuids.indexOf("1818") >= 0) {
     log("Found KICKR");
     foundKickr = true;
@@ -38,6 +33,11 @@ noble.on("discover", peripheral => {
     log("Found Cadence meter");
     foundCadenceMeter = true;
     handleCadenceMeter(peripheral);
+  }
+
+  if (getIsDoneDiscovering()) {
+    log("Done scanning.");
+    noble.stopScanning();
   }
 });
 
