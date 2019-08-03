@@ -124,3 +124,8 @@ const toFileBuffer = recordList => {
     Buffer.from([crc & 0xff, (crc >> 8) & 0xff])
   ]);
 };
+
+module.exports = {
+  Record,
+  toFileBuffer
+};
