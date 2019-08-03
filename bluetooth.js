@@ -1,4 +1,5 @@
 const noble = require("noble");
+const { Record, toFileBuffer } = require("./write-fit.js");
 
 let foundKickr = false;
 let foundHrm = false;
@@ -8,6 +9,42 @@ const getIsDoneDiscovering = () => foundKickr && foundHrm && foundCadenceMeter;
 
 const log = (...rest) => console.error(new Date(), ...rest);
 
+const isRepeatCadenceData = (a, b) => a.crankRevolutions == b.crankRevolutions;
+
+const queueMaker = () => {
+  const data = {
+    hr: [],
+    cadence: [],
+    power: []
+  };
+  return {
+    putPower: ({ instantaneousPower }) => data.power.push(instantaneousPower),
+    putHr: ({ rrInterval }) =>
+      isFinite(rrInterval) && data.hr.push(60 / rrInterval),
+    putCadence: record => {
+      if (
+        data.cadence.length == 0 ||
+        !isRepeatCadenceData(data.cadence[data.cadence.length - 1], record)
+      ) {
+        data.cadence.push(record);
+      }
+    },
+    pullRecord: dateTime => {
+      const record = Record(
+        dateTime,
+        data.power.length ? average(data.power) : null,
+        data.hr.length ? average(data.hr) : null,
+        data.cadence.length > 1 ? averageCadence(data.cadence) : null
+      );
+      data.hr = [];
+      data.cadence =
+        data.cadence.length > 0 ? [data.cadence[data.cadence.length - 1]] : [];
+      data.power = [];
+      return record;
+    }
+  };
+};
+
 noble.on("stateChange", state => {
   log("Received new state:", state);
   if (state == "poweredOn" && !getIsDoneDiscovering()) {
@@ -16,23 +53,41 @@ noble.on("stateChange", state => {
   }
 });
 
+const { putHr, putPower, putCadence, pullRecord } = queueMaker();
+
+const records = [];
+setInterval(() => {
+  const record = pullRecord(new Date());
+  log("Got Record", record);
+  records.push(record);
+}, 997);
+
+process.on("SIGINT", () => {
+  // TODO: Disconnect from all devices
+
+  log("Writing FIT file before close...");
+  require("fs").writeFileSync("workout.fit", toFileBuffer(records));
+  log("Done! Exiting now.");
+  process.exit();
+});
+
 noble.on("discover", peripheral => {
   if (peripheral.advertisement.serviceUuids.indexOf("1818") >= 0) {
     log("Found KICKR");
     foundKickr = true;
-    handleKickr(peripheral);
+    handleKickr(peripheral, putPower);
   }
 
   if (peripheral.advertisement.serviceUuids.indexOf("180d") >= 0) {
     log("Found HR monitor");
     foundHrm = true;
-    handleHrMonitor(peripheral);
+    handleHrMonitor(peripheral, putHr);
   }
 
   if (peripheral.advertisement.serviceUuids.indexOf("1816") >= 0) {
     log("Found Cadence meter");
     foundCadenceMeter = true;
-    handleCadenceMeter(peripheral);
+    handleCadenceMeter(peripheral, putCadence);
   }
 
   if (getIsDoneDiscovering()) {
@@ -41,7 +96,7 @@ noble.on("discover", peripheral => {
   }
 });
 
-const handleHrMonitor = peripheral => {
+const handleHrMonitor = (peripheral, put) => {
   peripheral.connect(err => {
     if (err) {
       log("Could not connect to HRM!", err);
@@ -62,9 +117,7 @@ const handleHrMonitor = peripheral => {
             log("Subscribed to heart rate data");
             hrmCharacteristic.on("data", data => {
               log("Heart Rate Measurement Event Received");
-              log(data);
-              log(parseHrm(data));
-              log(60 / parseHrm(data).rrInterval);
+              put(parseHrm(data));
             });
           }
         });
@@ -73,7 +126,7 @@ const handleHrMonitor = peripheral => {
   });
 };
 
-const handleCadenceMeter = peripheral => {
+const handleCadenceMeter = (peripheral, put) => {
   peripheral.connect(err => {
     if (err) {
       log("Could not connect to Cadence Meter!", err);
@@ -96,8 +149,7 @@ const handleCadenceMeter = peripheral => {
             log("Subscribed to heart rate data");
             cadenceCharacteristic.on("data", data => {
               log("Cadence Measurement Event Received");
-              log(data);
-              log(parseCadence(data));
+              put(parseCadence(data));
             });
           }
         });
@@ -106,7 +158,7 @@ const handleCadenceMeter = peripheral => {
   });
 };
 
-const handleKickr = peripheral => {
+const handleKickr = (peripheral, put) => {
   peripheral.connect(err => {
     if (err) {
       log("Could not connect to KICKR!", err);
@@ -114,21 +166,6 @@ const handleKickr = peripheral => {
     }
 
     log("Connected to KICKR");
-
-    process.on("SIGINT", () => {
-      log("Disconnecting before exit...");
-
-      peripheral.disconnect(err => {
-        log(err ? "Failed to disconnect!" : "Disconnected from KICKR");
-        process.exit();
-      });
-
-      setTimeout(() => {
-        log("Did not disconnect in time, forcing exit");
-        process.exit();
-      }, 2000);
-    });
-
     peripheral.discoverAllServicesAndCharacteristics(
       (err, services, characteristics) => {
         log("Services and Characteristics Discovered");
@@ -150,7 +187,7 @@ const handleKickr = peripheral => {
             log("Subscribed to power data");
             powerCharacteristic.on("data", data => {
               log("Power Measurement Event Received");
-              log(parsePowerMeasure(data));
+              put(parsePowerMeasure(data));
             });
           }
         });
@@ -174,6 +211,33 @@ const handleKickr = peripheral => {
       }
     );
   });
+};
+
+const average = list => list.reduce((a, b) => a + b, 0) / list.length;
+
+const calcCadence = (a, b) => {
+  if (a == b) {
+    return null;
+  }
+  const duration =
+    b.lastCrankEventTime > a.lastCrankEventTime
+      ? b.lastCrankEventTime - a.lastCrankEventTime
+      : Math.pow(2, 6) + b.lastCrankEventTime - a.lastCrankEventTime;
+
+  // This only overflows at like 11hrs of 100rpm, but it can happen!
+  const totalRevolutions =
+    b.crankRevolutions > a.crankRevolutions
+      ? b.crankRevolutions - a.crankRevolutions
+      : Math.pow(2, 16) + b.crankRevolutions - a.crankRevolutions;
+  return totalRevolutions * 60 / duration;
+};
+
+const averageCadence = list => {
+  const x = [];
+  for (i = 1; i < list.length; i++) {
+    x.push(calcCadence(list[i - 1], list[i]));
+  }
+  return average(x);
 };
 
 const parsePowerMeasure = buffer => {
