@@ -29,25 +29,34 @@ const makeHeader = length => {
 
 const recordToBytes = record => {
   const ts = Math.floor(record.dateTime.getTime() / 1000) - 631065600;
-  return Buffer.from([
+  const bytes = [
     0,
     // Time
     ts & 0xff,
     (ts >> 8) & 0xff,
     (ts >> 16) & 0xff,
-    (ts >> 24) & 0xff,
-    // Power
-    record.power & 0xff,
-    (record.power >> 8) & 0xff,
-    // heartRate
-    record.heartRate & 0xff,
-    // cadence
-    record.cadence & 0xff
-  ]);
+    (ts >> 24) & 0xff
+  ];
+
+  if (record.power != null) {
+    const roundedPower = Math.round(record.power);
+    bytes.push(roundedPower & 0xff);
+    bytes.push((roundedPower >> 8) & 0xff);
+  }
+
+  if (record.heartRate != null) {
+    bytes.push(Math.round(record.heartRate) & 0xff);
+  }
+
+  if (record.cadence != null) {
+    bytes.push(Math.round(record.cadence) & 0xff);
+  }
+
+  return Buffer.from(bytes);
 };
 
 const recordDef = record => {
-  return Buffer.from([
+  const base = Buffer.from([
     // Field definition for message type 0
     64,
     // Reserved
@@ -58,23 +67,39 @@ const recordDef = record => {
     20,
     0,
     // Number of fields
-    4,
+    1 +
+      (record.power != null) +
+      (record.heartRate != null) +
+      (record.cadence != null),
     // Timestamp (field definition number, byte count, default type (u32))
     253,
     4,
-    0x86,
+    0x86
+  ]);
+  const powerDef = [
     // Power (field definition number, byte count, default type (u16))
     7,
     2,
-    0x84,
+    0x84
+  ];
+  const hrDef = [
     // HeartRate (field definition number, byte count, default type (u8))
     3,
     1,
-    2,
+    2
+  ];
+  const cadenceDef = [
     // Cadence (field definition number, byte count, default type (u8))
     4,
     1,
     2
+  ];
+
+  return Buffer.concat([
+    base,
+    Buffer.from(record.power != null ? powerDef : []),
+    Buffer.from(record.heartRate != null ? hrDef : []),
+    Buffer.from(record.cadence != null ? cadenceDef : [])
   ]);
 };
 
@@ -112,11 +137,47 @@ calculateCrc = blob => {
   return crc;
 };
 
+const sameListValues = (a, b) => {
+  if (a.length != b.length) {
+    return false;
+  }
+
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const recordsToBuffer = list => {
+  const { buffers } = list.reduce(
+    ({ lastDef, buffers }, next) => {
+      const newDef = recordDef(next);
+      if (lastDef) {
+        if (!sameListValues(newDef, lastDef)) {
+          buffers.push(newDef);
+        }
+      } else {
+        buffers.push(newDef);
+      }
+      buffers.push(recordToBytes(next));
+      return {
+        buffers,
+        lastDef: newDef
+      };
+    },
+    { buffers: [] }
+  );
+  return Buffer.concat(buffers);
+};
+
 const toFileBuffer = recordList => {
+  const recordBuffer = recordsToBuffer(recordList);
   const withoutChecksum = Buffer.concat([
-    makeHeader(18 + recordList.length * 9),
-    recordDef(),
-    Buffer.concat(recordList.map(recordToBytes))
+    makeHeader(recordBuffer.length),
+    recordBuffer
   ]);
   const crc = calculateCrc(withoutChecksum);
   return Buffer.concat([
