@@ -10,10 +10,10 @@ const makeHeader = length => {
     // Header length
     12,
     // protocol version
-    0,
+    0x20,
     // profile version (little endian)
-    0,
-    0,
+    0xeb,
+    0x07,
     // number of bytes excluding header and checksum (little endian)
     length & 0xff,
     (length >> 8) & 0xff,
