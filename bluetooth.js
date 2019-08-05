@@ -12,13 +12,17 @@ const log = (...rest) => console.error(new Date(), ...rest);
 const isRepeatCadenceData = (a, b) => a.crankRevolutions == b.crankRevolutions;
 
 const queueMaker = () => {
+  let lastPower;
   const data = {
     hr: [],
     cadence: [],
     power: []
   };
   return {
-    putPower: ({ instantaneousPower }) => data.power.push(instantaneousPower),
+    putPower: ({ instantaneousPower }) => {
+      data.power.push(instantaneousPower);
+      lastPower = instantaneousPower;
+    },
     putHr: ({ rrInterval }) =>
       isFinite(rrInterval) && data.hr.push(60 / rrInterval),
     putCadence: record => {
@@ -33,7 +37,9 @@ const queueMaker = () => {
       const record = Record(
         dateTime,
         data.power.length ? average(data.power) : null,
-        data.hr.length ? average(data.hr) : null,
+        // Strava doesn't interpolate power, so we'll assume it was constant
+        // if we didn't get one this tick
+        data.hr.length ? average(data.hr) : lastPower,
         data.cadence.length > 1 ? averageCadence(data.cadence) : null
       );
       data.hr = [];
