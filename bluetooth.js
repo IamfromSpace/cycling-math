@@ -1,12 +1,6 @@
 const noble = require("noble");
 const { Record, toFileBuffer } = require("./write-fit.js");
 
-let foundKickr = false;
-let foundHrm = false;
-let foundCadenceMeter = false;
-
-const getIsDoneDiscovering = () => foundKickr && foundHrm && foundCadenceMeter;
-
 const log = (...rest) => console.error(new Date(), ...rest);
 
 const isRepeatCadenceData = (a, b) => a.crankRevolutions == b.crankRevolutions;
@@ -51,11 +45,18 @@ const queueMaker = () => {
   };
 };
 
-noble.on("stateChange", state => {
+const POWER_SERVICE_ID = "1818";
+const HR_SERVICE_ID = "180d";
+const CADENCE_SERVICE_ID = "1816";
+
+noble.once("stateChange", state => {
   log("Received new state:", state);
-  if (state == "poweredOn" && !getIsDoneDiscovering()) {
-    log("Starting Scan");
-    noble.startScanning(["1818", "180d", "1816"]);
+  if (state == "poweredOn") {
+    log("Starting Scan for KICKR");
+    noble.startScanning([POWER_SERVICE_ID]);
+  } else {
+    log("First change was not power on!  Please restart");
+    process.exit(1);
   }
 });
 
@@ -78,27 +79,29 @@ process.on("SIGINT", () => {
 });
 
 noble.on("discover", peripheral => {
-  if (peripheral.advertisement.serviceUuids.indexOf("1818") >= 0) {
+  if (peripheral.advertisement.serviceUuids.indexOf(POWER_SERVICE_ID) >= 0) {
     log("Found KICKR");
-    foundKickr = true;
+    noble.stopScanning(() => {
+      log("Starting Scan for HRM");
+      noble.startScanning([HR_SERVICE_ID]);
+    });
     handleKickr(peripheral, putPower);
   }
 
-  if (peripheral.advertisement.serviceUuids.indexOf("180d") >= 0) {
+  if (peripheral.advertisement.serviceUuids.indexOf(HR_SERVICE_ID) >= 0) {
     log("Found HR monitor");
-    foundHrm = true;
+    noble.stopScanning(() => {
+      log("Starting Scan for Cadence Meten");
+      noble.startScanning([CADENCE_SERVICE_ID]);
+    });
     handleHrMonitor(peripheral, putHr);
   }
 
-  if (peripheral.advertisement.serviceUuids.indexOf("1816") >= 0) {
+  if (peripheral.advertisement.serviceUuids.indexOf(CADENCE_SERVICE_ID) >= 0) {
     log("Found Cadence meter");
-    foundCadenceMeter = true;
-    handleCadenceMeter(peripheral, putCadence);
-  }
-
-  if (getIsDoneDiscovering()) {
-    log("Done scanning.");
+    log("Found all devices");
     noble.stopScanning();
+    handleCadenceMeter(peripheral, putCadence);
   }
 });
 
