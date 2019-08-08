@@ -1,5 +1,5 @@
 const noble = require("noble");
-const { Readable } = require("stream");
+const { Readable, Writable } = require("stream");
 
 const log = (...rest) => console.error(new Date(), ...rest);
 
@@ -25,15 +25,32 @@ const getDevice = (uuid, cb) => {
   // stops or the adapter powers down
 };
 
-const _autoReconnectSubscription = (peripheral, charUuid, stream, cb) => {
+const _autoReconnectSubscription = (
+  peripheral,
+  onConnect,
+  charUuid,
+  readStream,
+  writeUuid,
+  writeStream,
+  cb
+) => {
   peripheral.connect(err => {
     if (err) {
       return cb(err);
     }
 
     peripheral.once("disconnect", () => {
+      writeStream && writeStream.cork();
       log("Connection dropped!");
-      _autoReconnectSubscription(peripheral, charUuid, stream, () => {});
+      _autoReconnectSubscription(
+        peripheral,
+        onConnect,
+        charUuid,
+        readStream,
+        writeUuid,
+        writeStream,
+        () => {}
+      );
     });
 
     log("Connected!");
@@ -41,29 +58,68 @@ const _autoReconnectSubscription = (peripheral, charUuid, stream, cb) => {
       (err, services, characteristics) => {
         log("Services and Characteristics Discovered");
 
-        const c = characteristics.find(x => x.uuid === charUuid);
-
-        c.subscribe(err => {
+        onConnect(characteristics, err => {
           if (err) {
-            log("Could not subscribe to characteristic!");
-            cb(err);
-          } else {
-            log("Subscribed to characteristic");
-            c.on("data", x => stream.push(x));
-            cb();
+            return cb(err);
           }
+
+          const c = characteristics.find(x => x.uuid === charUuid);
+
+          c.subscribe(err => {
+            if (err) {
+              log("Could not subscribe to characteristic!");
+              cb(err);
+            } else {
+              log("Subscribed to characteristic");
+              c.on("data", x => readStream.push(x));
+
+              if (writeStream) {
+                const wc = characteristics.find(x => x.uuid == writeUuid);
+                writeStream.characteristic = wc;
+                writeStream.uncork();
+              }
+
+              cb();
+            }
+          });
         });
       }
     );
   });
 };
 
-const autoReconnectSubscription = (peripheral, charUuid, cb) => {
-  const stream = new Readable({
+const autoReconnectSubscription = (
+  peripheral,
+  onConnect,
+  charUuid,
+  writeUuid,
+  cb
+) => {
+  const readStream = new Readable({
     read: function() {}
   });
 
-  _autoReconnectSubscription(peripheral, charUuid, stream, err => {
-    cb(err, stream);
-  });
+  let writeStream;
+  if (writeUuid) {
+    writeStream = new Writable({
+      write: function(buffer, _, cb) {
+        // TODO: best way to handle withoutResponse?
+        this.characteristic.write(buffer, true, cb);
+      }
+    });
+
+    writeStream.cork();
+  }
+
+  _autoReconnectSubscription(
+    peripheral,
+    onConnect,
+    charUuid,
+    readStream,
+    writeUuid,
+    writeStream,
+    err => {
+      cb(err, readStream, writeStream);
+    }
+  );
 };
