@@ -41,3 +41,7 @@ const connectToCadence = cb => {
     );
   });
 };
+
+module.exports = {
+  connectToCadence
+};

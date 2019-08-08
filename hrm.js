@@ -39,3 +39,7 @@ const connectToHrm = cb => {
     );
   });
 };
+
+module.exports = {
+  connectToHrm
+};

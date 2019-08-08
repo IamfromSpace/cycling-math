@@ -67,3 +67,7 @@ const connectToKickr = cb => {
     );
   });
 };
+
+module.exports = {
+  connectToKickr
+};
