@@ -123,3 +123,8 @@ const autoReconnectSubscription = (
     }
   );
 };
+
+module.exports = {
+  getDevice,
+  autoReconnectSubscription
+};
