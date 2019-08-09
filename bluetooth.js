@@ -61,7 +61,10 @@ process.on("SIGINT", () => {
   // TODO: Disconnect from all devices
 
   log("Writing FIT file before close...");
-  require("fs").writeFileSync("workout.fit", toFileBuffer(records));
+  require("fs").writeFileSync(
+    "workout_" + new Date().getTime() + ".fit",
+    toFileBuffer(records)
+  );
   log("Done! Exiting now.");
   process.exit();
 });
