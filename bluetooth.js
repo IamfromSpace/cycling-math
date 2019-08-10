@@ -3,6 +3,7 @@ const { Record, toFileBuffer } = require("./write-fit.js");
 const { connectToHrm } = require("./hrm");
 const { connectToKickr } = require("./kickr");
 const { connectToCadence } = require("./cadence");
+const { runWorkout, BigStartIntervalsWorkout } = require("./workouts");
 
 const log = (...rest) => console.error(new Date(), ...rest);
 
@@ -99,6 +100,21 @@ connectToHrm((err, hrStream) => {
 
       log("Cadence Meter connected!");
       cadenceStream.on("data", putCadence);
+
+      runWorkout(
+        powerControl.write.bind(powerControl),
+        BigStartIntervalsWorkout({
+          highPower: 320,
+          lowPower: 120,
+          warmUpPower: 120,
+          tailPower: 140,
+          intervalCount: 14,
+          firstDuration: 2.5 * 60,
+          highDuration: 60,
+          lowDuration: 90,
+          warmUpDuration: 5 * 60
+        })
+      );
     });
   });
 });
