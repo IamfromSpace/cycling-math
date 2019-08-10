@@ -56,6 +56,10 @@ const _autoReconnectSubscription = (
     log("Connected!");
     peripheral.discoverAllServicesAndCharacteristics(
       (err, services, characteristics) => {
+        if (err) {
+          return cb(err);
+        }
+
         log("Services and Characteristics Discovered");
 
         onConnect(characteristics, err => {
