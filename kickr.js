@@ -28,7 +28,19 @@ const connectToKickr = cb => {
         x => x.uuid === "a026e0020a7d4ab397faf1500f9feb8b"
       );
 
-      unlockCharacteristic.write(Buffer.from([0x20, 0xee, 0xfc]), true, cb);
+      const trainerCharacteristic = characteristics.find(
+        x => x.uuid === "a026e0050a7d4ab397faf1500f9feb8b"
+      );
+
+      // It appears that power control writes will not take affect unless
+      // a) we subscribe to the trainer characteristic
+      // b) we write the correct code to the unlock characteristic
+      trainerCharacteristic.subscribe(err => {
+        if (err) {
+          return cb(err);
+        }
+        unlockCharacteristic.write(Buffer.from([0x20, 0xee, 0xfc]), true, cb);
+      });
     };
 
     autoReconnectSubscription(
