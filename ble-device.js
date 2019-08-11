@@ -108,7 +108,7 @@ const autoReconnectSubscription = (
     writeStream = new Writable({
       write: function(buffer, _, cb) {
         // TODO: best way to handle withoutResponse?
-        this.characteristic.write(buffer, true, cb);
+        this.characteristic.write(buffer, false, cb);
       }
     });
 
