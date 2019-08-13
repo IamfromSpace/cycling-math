@@ -104,15 +104,15 @@ connectToHrm((err, hrStream) => {
       runWorkout(
         powerControl.write.bind(powerControl),
         BigStartIntervalsWorkout({
-          highPower: 320,
-          lowPower: 120,
           warmUpPower: 120,
-          tailPower: 140,
+          warmUpDuration: 5 * 60,
           intervalCount: 14,
+          highPower: 320,
           firstDuration: 2.5 * 60,
           highDuration: 60,
+          lowPower: 120,
           lowDuration: 90,
-          warmUpDuration: 5 * 60
+          tailPower: 140
         })
       );
     });
