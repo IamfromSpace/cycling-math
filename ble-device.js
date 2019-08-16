@@ -34,57 +34,61 @@ const _autoReconnectSubscription = (
   writeStream,
   cb
 ) => {
+  log("Connecting!");
   peripheral.connect(err => {
     if (err) {
+      log("Failed to connect!");
       return cb(err);
     }
 
-    peripheral.once("disconnect", () => {
-      writeStream && writeStream.cork();
-      log("Connection dropped!");
-      _autoReconnectSubscription(
-        peripheral,
-        onConnect,
-        charUuid,
-        readStream,
-        writeUuid,
-        writeStream,
-        () => {}
-      );
-    });
-
     log("Connected!");
     peripheral.discoverAllServicesAndCharacteristics(
-      (err, services, characteristics) => {
+      (err, _, characteristics) => {
         if (err) {
+          log("Could not discover services and characteristics!");
           return cb(err);
         }
 
         log("Services and Characteristics Discovered");
-
         onConnect(characteristics, err => {
           if (err) {
+            log("onConnect hook failed!");
             return cb(err);
           }
 
+          log("onConnect hook success");
           const c = characteristics.find(x => x.uuid === charUuid);
 
           c.subscribe(err => {
             if (err) {
               log("Could not subscribe to characteristic!");
-              cb(err);
-            } else {
-              log("Subscribed to characteristic");
-              c.on("data", x => readStream.push(x));
-
-              if (writeStream) {
-                const wc = characteristics.find(x => x.uuid == writeUuid);
-                writeStream.characteristic = wc;
-                writeStream.uncork();
-              }
-
-              cb();
+              return cb(err);
             }
+
+            log("Subscribed to characteristic");
+            c.on("data", x => readStream.push(x));
+
+            if (writeStream) {
+              const wc = characteristics.find(x => x.uuid == writeUuid);
+              writeStream.characteristic = wc;
+              writeStream.uncork();
+            }
+
+            peripheral.once("disconnect", () => {
+              writeStream && writeStream.cork();
+              log("Connection dropped!");
+              _autoReconnectSubscription(
+                peripheral,
+                onConnect,
+                charUuid,
+                readStream,
+                writeUuid,
+                writeStream,
+                () => {}
+              );
+            });
+
+            cb();
           });
         });
       }
