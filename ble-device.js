@@ -42,6 +42,7 @@ const _autoReconnectSubscription = (
     }
 
     log("Connected!");
+    // TODO: it appears that this sometimes just hangs
     peripheral.discoverAllServicesAndCharacteristics(
       (err, _, characteristics) => {
         if (err) {
@@ -77,15 +78,17 @@ const _autoReconnectSubscription = (
             peripheral.once("disconnect", () => {
               writeStream && writeStream.cork();
               log("Connection dropped!");
-              _autoReconnectSubscription(
-                peripheral,
-                onConnect,
-                charUuid,
-                readStream,
-                writeUuid,
-                writeStream,
-                () => {}
-              );
+              setTimeout(() => {
+                _autoReconnectSubscription(
+                  peripheral,
+                  onConnect,
+                  charUuid,
+                  readStream,
+                  writeUuid,
+                  writeStream,
+                  () => {}
+                );
+              }, 1000);
             });
 
             cb();
